@@ -1,5 +1,5 @@
 /* ===========================================================
- *  binx / Dual Linkage Engine ï¿½?Service Worker
+ *  binx / Dual Linkage Engine ï¿?Service Worker
  *  Defense-in-depth supplement to in-page domain binding:
  *   1. Intercepts fetch before any page JS runs.
  *   2. Allows ONLY whitelisted deployment origins + sub-paths.
@@ -21,7 +21,7 @@ const POLICY = Object.freeze({
   //   await crypto.subtle.digest('SHA-256', new TextEncoder().encode(htmlText))
   //     .then(b => btoa(String.fromCharCode(...new Uint8Array(b))))
   // Leave empty array to skip HTML hash pinning (only origin enforced).
-  PINNED_HTML_HASHES: Object.freeze(['V4LOyVsbbJHKtN+AC+8m50J6O28Q1O80BJas3eJgBIM=']),
+  PINNED_HTML_HASHES: Object.freeze(['4X+B0PKNouyO/7/xj0z6oYNoRy7/VR9DZr2nLzw+rIo=']),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
 });
@@ -166,7 +166,7 @@ self.addEventListener('fetch', function (ev) {
           '<body style="padding:40px;color:#b00;font:16px/1.6 sans-serif;text-align:center">' +
           '<b>HTML INTEGRITY CHECK FAILED</b><br><br>' +
           'The served main page does not match the pinned hash.<br>' +
-          'Possible MITM / server tamper ï¿½?do not proceed.<br><br>' +
+          'Possible MITM / server tamper ï¿?do not proceed.<br><br>' +
           'Got hash: <code>' + h + '</code>' +
           '</body></html>',
           { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
@@ -184,3 +184,6 @@ try {
     try { self.registration.update(); } catch (_) {}
   }, POLICY.UPDATE_CHECK_INTERVAL_SEC * 1000);
 } catch (_) {}
+
+
+
