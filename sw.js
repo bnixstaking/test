@@ -9,12 +9,10 @@
 // ---------- IMMUTABLE POLICY (hard-coded, not config) ----------
 const POLICY = Object.freeze({
   // Whitelisted deployment prefixes (exact path segment matching)
-  // ⚠️ 2026-09-28: 按需求方要求清空历史部署源，仅保留 fiststaking.github.io。
-  //   避坑: 结尾斜杠不可省 —— _matchesPrefix 以 pathname 段级比对，根路径 '/' 表示
-  //   该主机下任意路径放行（与历史 bnixstaking.github.io/ 同口径）。
-  // 2026-11-01: 按要求重新加入 bnixstaking.github.io（根路径 ⇒ 该主机下任意后缀路径均放行）。
   CANONICAL_PREFIXES: Object.freeze([
-    'https://fiststaking.github.io/',
+    'https://bnbclubone.github.io/bnix/',
+    'https://bnbclubone.github.io/bnixclub/',
+    'https://bnbclubone.github.io/cloud/',
     'https://bnixstaking.github.io/'
   ]),
   // If you rebuild index.html, regenerate via:
@@ -23,19 +21,16 @@ const POLICY = Object.freeze({
   //   await crypto.subtle.digest('SHA-256', new TextEncoder().encode(htmlText))
   //     .then(b => btoa(String.fromCharCode(...new Uint8Array(b))))
   // Leave empty array to skip HTML hash pinning (only origin enforced).
-  // 当前已回填第 ⑪ 代 index.html（核心地址第⑪代正式版 + 空投质押 0x1f4aC8D2…a506〔7 天周期〕
-  // + OSK/FIST 质押 3 倍出局进度条 + 国库 convertFistdaoFeeToOskLp 任何人可调用按钮
-  // 〔滑点固定 1500 bp〕+ 修正 1 FIST/1 OSK 兑换方向倒置 + 刷新频率改 60s
-  // + 各 Tab 均设操作日志框（修复空投 Tab 操作无日志）+ 复投到期/授权前置校验
-  // + 白名单 fiststaking.github.io + bnixstaking.github.io，2026-11-01）的 SHA-256
-  // （base64，先剥离 Cloudflare beacon 注入）。
-  // 2026-11-01 增补：Connect Wallet 卡死修复版（RPC 硬超时 + 健康通道排序 + 连接顺序调整）。
-  // 数组里多留了一条「上一版」哈希，用于 GitHub Pages CDN（max-age=600）回源窗口内
-  // 仍可能下发旧 index.html 的情况；等全网缓存刷新完（约 30 分钟后）可删掉第二项。
-  // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
+  // ⚠️ 说明（2026-11-01）: 下面的 HTML 钉**只对根路径文档生效**（pathname 为 '/' 或
+  //   '/index.html' / '/mainindex.html'，见 isMainDoc）。本项目的现网部署都在子路径
+  //   （/bnix/、/bnixclub/、/cloud/），因此钉默认不参与校验；sub-app（/farm/）同理不受影响。
+  //   若要给子路径也开启钉，需要同时放宽 isMainDoc，并把该路径下**所有**历史版本哈希入列，
+  //   否则 CDN 缓存窗口内会有 403 风险。
+  // 2026-11-01：连接卡死修复版（RPC 硬超时 + 健康通道排序 + 连接顺序调整）。
+  //   数组第二项为修复前的旧哈希，用于缓存/回滚过渡；全网刷新后可只留第一项。
   PINNED_HTML_HASHES: Object.freeze([
-    'nKvnBsW/GgRe+lqSoNOuSNVb4upJaQtra8jkS+Wd0Z4=', // 2026-11-01 连接卡死修复版
-    '2YVRkS6GikWfH31dIfAE6tpCiGuDHkVxqXUW+qUcvl4='  // 上一版（CDN 缓存窗口过渡用，可择期删除）
+    'CNUqe6HbT2RnIJ7DqIxQ410CZdFgqZ6iQ2x3U20Z2yU=', // 2026-11-01 连接卡死修复版
+    'CgXT36n4N2hCljC9g6nQY9SCsTl7km5d3AcaUD6Kepc='  // 上一版（过渡用，可择期删除）
   ]),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
@@ -116,13 +111,13 @@ self.addEventListener('fetch', function (ev) {
 
   // Allow local debug origins: skip HTTPS + canonical prefix enforcement
   // so that http://localhost:8770 / http://127.0.0.1:8545 can be served.
-  // NOTE: This bypass also skips HTML hash pinning for local origins.
-  if (req.mode === 'navigate' || req.destination === 'document') {
-    var localDebugRe = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
-    if (localDebugRe.test(url)) {
-      // Let it pass without HTTPS, canonical prefix, or hash checks
-      return;
-    }
+  // NOTE: This bypass also skips HTML hash pinning for local origins, and
+  // applies to every request (not only documents) so sub-app assets under
+  // /farm/ can load during local testing.
+  var localDebugRe = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
+  if (localDebugRe.test(url)) {
+    // Let it pass without HTTPS, canonical prefix, or hash checks
+    return;
   }
 
   // Pass through non-GET navigation-less (e.g. CORS preflight, POST RPC).
@@ -162,12 +157,10 @@ self.addEventListener('fetch', function (ev) {
   }
 
   // 2) HTML INTEGRITY PIN (optional, MAIN DOCUMENT ONLY)
-  //    WARNING: this SW is registered at the site root (scope './'), so it also
-  //    intercepts navigations to sub-apps such as /farm/. Pinning every
-  //    navigation would 403 any sub-app whose HTML is not pinned, so the pin is
-  //    narrowed to the root document ( "/" or "/index.html" or "/mainindex.html" ).
-  //    Byte-level note: this block is ASCII-only on purpose -- sw.js contains two
-  //    invalid UTF-8 bytes elsewhere; never rewrite this file through a text editor.
+  //    This SW is registered at the site root (scope './'), so it also
+  //    intercepts navigations to same-origin sub-apps such as /farm/.
+  //    Pinning every navigation would 403 any sub-app whose HTML is not
+  //    pinned, so the pin is narrowed to the root document.
   var isMainDoc = false;
   try {
     var _u = new URL(url);
